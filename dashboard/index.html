@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>API Shield - Live Dashboard</title>
+    <style>
+        :root{
+            --bg:#0f1720;
+            --card:#0b1220;
+            --muted:#9aa4b2;
+            --success:#16a34a;
+            --danger:#ef4444;
+            --bot:#f97316;
+            --panel-radius:10px;
+        }
+        body{font-family:Inter,ui-sans-serif,system-ui,Arial,sans-serif;background:var(--bg);color:#e6eef6;margin:0;padding:24px}
+        header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+        h1{font-size:20px;margin:0;color:var(--success)}
+        .summary{display:flex;gap:12px}
+        .summary .card{background:var(--card);padding:12px 18px;border-radius:var(--panel-radius);min-width:160px}
+        .card .label{color:var(--muted);font-size:12px}
+        .card .value{font-size:18px;margin-top:6px}
+
+        main{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+
+        .panel{background:var(--card);padding:14px;border-radius:var(--panel-radius)}
+        .logs{max-height:60vh;overflow:auto}
+        .log-entry{padding:10px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+        .log-meta{font-size:12px;color:var(--muted)}
+        .success{background:rgba(22,163,74,0.08);border-left:4px solid var(--success)}
+        .blocked{background:rgba(239,68,68,0.08);border-left:4px solid var(--danger)}
+        .bot{background:rgba(249,115,22,0.06);border-left:4px solid var(--bot)}
+
+        .right-col{display:flex;flex-direction:column;gap:12px}
+        .bots-list,.suspicious-list{max-height:28vh;overflow:auto}
+        .panel-title{font-weight:600;margin-bottom:8px}
+        footer{margin-top:14px;color:var(--muted);font-size:12px}
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>🔐 API Shield - Live Security Dashboard</h1>
+            <div style="color:var(--muted);font-size:13px">Auto-refresh every 3 seconds · Showing recent activity</div>
+        </div>
+        <div class="summary">
+            <div class="card">
+                <div class="label">Total Requests</div>
+                <div id="totalRequests" class="value">—</div>
+            </div>
+            <div class="card">
+                <div class="label">Successful</div>
+                <div id="successful" class="value" style="color:var(--success)">—</div>
+            </div>
+            <div class="card">
+                <div class="label">Blocked</div>
+                <div id="blocked" class="value" style="color:var(--danger)">—</div>
+            </div>
+            <div class="card">
+                <div class="label">Bots Detected</div>
+                <div id="botsDetected" class="value" style="color:var(--bot)">—</div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="panel">
+            <div class="panel-title">Recent Activity</div>
+            <div id="logContainer" class="logs">Loading...</div>
+        </section>
+
+        <aside class="right-col">
+            <div class="panel">
+                <div class="panel-title">Bot Detections (Orange)</div>
+                <div id="botContainer" class="bots-list">Loading...</div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">Suspicious IPs (Red)</div>
+                <div id="suspiciousContainer" class="suspicious-list">Loading...</div>
+            </div>
+        </aside>
+    </main>
+
+    <footer>API Shield · Live monitoring</footer>
+
+    <script>
+        async function fetchData(){
+            try{
+                const [logsRes, ipsRes] = await Promise.all([
+                    fetch('/logs'),
+                    fetch('/suspicious-ips')
+                ]);
+
+                const logsJson = await logsRes.json();
+                const ipsJson = await ipsRes.json();
+
+                const logs = logsJson.logs || [];
+                const summary = logsJson.summary || {total_requests:0,blocked:0,successful:0,bots_detected:0};
+                const botLogs = logsJson.bot_logs || [];
+
+                document.getElementById('totalRequests').innerText = summary.total_requests;
+                document.getElementById('blocked').innerText = summary.blocked;
+                document.getElementById('successful').innerText = summary.successful;
+                document.getElementById('botsDetected').innerText = summary.bots_detected;
+
+                const container = document.getElementById('logContainer');
+                container.innerHTML = '';
+
+                // Show up to last 20 events, newest first
+                logs.slice(-20).reverse().forEach(log => {
+                    const div = document.createElement('div');
+                    div.className = 'log-entry ' + (log.event && log.event.includes('BOT DETECTED') ? 'bot' : (log.status < 400 ? 'success' : 'blocked'));
+                    const left = document.createElement('div');
+                    left.innerHTML = `<div style="font-weight:600">${escapeHtml(log.event)}</div><div class=\"log-meta\">${escapeHtml(log.ip)} • ${escapeHtml(log.time)}</div>`;
+                    const right = document.createElement('div');
+                    right.innerHTML = `<div class=\"log-meta\">Status: ${log.status}</div>`;
+                    div.appendChild(left);
+                    div.appendChild(right);
+                    container.appendChild(div);
+                });
+
+                const botContainer = document.getElementById('botContainer');
+                botContainer.innerHTML = '';
+                if(botLogs.length===0){
+                    botContainer.innerHTML = '<div class="log-meta">No bot detections</div>';
+                } else {
+                    botLogs.slice(-20).reverse().forEach(b => {
+                        const d = document.createElement('div');
+                        d.className = 'log-entry bot';
+                        d.innerHTML = `<div style="font-weight:600">${escapeHtml(b.event)}</div><div class=\"log-meta\">${escapeHtml(b.ip)} • ${escapeHtml(b.time)}</div>`;
+                        botContainer.appendChild(d);
+                    });
+                }
+
+                const suspicious = ipsJson.suspicious_ips || [];
+                const suspiciousContainer = document.getElementById('suspiciousContainer');
+                suspiciousContainer.innerHTML = '';
+                if(suspicious.length===0){
+                    suspiciousContainer.innerHTML = '<div class="log-meta">No suspicious IPs</div>';
+                } else {
+                    suspicious.forEach(ip => {
+                        const d = document.createElement('div');
+                        d.className = 'log-entry blocked';
+                        d.innerHTML = `<div style="font-weight:600">${escapeHtml(ip)}</div>`;
+                        suspiciousContainer.appendChild(d);
+                    });
+                }
+
+            } catch(err){
+                console.error(err);
+            }
+        }
+
+        function escapeHtml(text){
+            if(!text && text!==0) return '';
+            return String(text).replace(/[&<>\"']/g, function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});
+        }
+
+        fetchData();
+        setInterval(fetchData, 3000);
+    </script>
+
+</body>
+</html>
