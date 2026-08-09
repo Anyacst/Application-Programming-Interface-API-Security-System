@@ -6,7 +6,7 @@ from collections import defaultdict
 import time
 
 app = Flask(__name__)
-limiter = Limiter(get_remote_address, app=app, default_limits=["10 per minute"])
+limiter = Limiter(get_remote_address, app=app)
 
 students = [
     {"id": 1, "name": "Aman", "course": "Computer Science", "email": "aman123@gmail.com", "phone": "9876543210"},
@@ -17,11 +17,19 @@ activity_log = []
 request_timestamps = defaultdict(list)
 blocked_ip_counts = defaultdict(int)
 suspicious_ips = set()
+bot_detected_ips = set()
 
 USERS = [
     {"username": "admin", "password": "1234", "role": "admin"},
     {"username": "student1", "password": "abcd", "role": "student"}
 ]
+
+MONITORING_ENDPOINTS = {
+    "/dashboard",
+    "/logs",
+    "/suspicious-ips",
+    "/clear-logs"
+}
 
 
 def get_client_ip():
@@ -33,18 +41,26 @@ def get_client_ip():
 
 
 def mark_ip_if_suspicious(ip):
-    # Add IP to suspicious list after 3 or more blocked events.
-    if blocked_ip_counts[ip] >= 3:
+    # Add IP to suspicious list after 5 or more blocked events.
+    if blocked_ip_counts[ip] >= 5:
         suspicious_ips.add(ip)
 
 
 def add_activity(event, status, ip=None, blocked=False):
     # Keep a compact event record for dashboard and logs route.
     ip_address = ip or get_client_ip()
+
+    # Don't log repeated blocked events for known bot IPs
+    if ip_address in bot_detected_ips and event != "BOT DETECTED - Suspicious IP":
+        return
+
     activity_log.append({
+        "id": len(activity_log) + 1,
         "event": event,
         "status": status,
         "ip": ip_address,
+        "endpoint": request.path,
+        "method": request.method,
         "time": time.strftime("%Y-%m-%d %H:%M:%S")
     })
 
@@ -63,6 +79,10 @@ def extract_token():
 
 @app.before_request
 def detect_bot_traffic():
+    # Skip bot detection for monitoring/dashboard endpoints.
+    if request.path in MONITORING_ENDPOINTS:
+        return
+
     # Bot rule: more than 5 requests from same IP in 3 seconds.
     ip = get_client_ip()
     now = time.time()
@@ -72,8 +92,19 @@ def detect_bot_traffic():
     request_timestamps[ip] = recent
 
     if len(recent) > 5:
-        add_activity("BOT DETECTED - Suspicious IP", 429, ip=ip, blocked=True)
-        return jsonify({"message": "BOT DETECTED - Suspicious IP"}), 429
+
+        if ip not in bot_detected_ips:
+            bot_detected_ips.add(ip)
+            add_activity(
+                "BOT DETECTED - Suspicious IP",
+                429,
+                ip=ip,
+                blocked=True
+            )
+
+        return jsonify({
+            "message":"BOT DETECTED - Suspicious IP"
+        }),429
 
 
 @app.route('/login', methods=['POST'])
@@ -120,6 +151,7 @@ def get_students():
     return jsonify(safe_students)
 
 
+@limiter.exempt
 @app.route('/dashboard')
 def dashboard():
     # Serve the live dashboard page.
@@ -163,7 +195,8 @@ def handle_rate_limit(_error):
     return jsonify({"message": "Rate limit exceeded. Try again later."}), 429
 
 
-@app.route('/logs', methods=['GET'])
+@limiter.exempt
+@app.route('/logs')
 def get_logs():
     # Return events and summary metrics for dashboard rendering.
     logs = activity_log[-100:]
@@ -176,18 +209,37 @@ def get_logs():
         "logs": logs,
         "summary": {
             "total_requests": len(logs),
-            "blocked": blocked,
             "successful": successful,
-            "bots_detected": bot_detected
+            "blocked": blocked,
+            "bots_detected": bot_detected,
+            "suspicious_ips": len(suspicious_ips)
         },
-        "bot_logs": bot_logs
+        "bot_logs": bot_logs,
+        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S")
     })
 
 
-@app.route('/suspicious-ips', methods=['GET'])
+@limiter.exempt
+@app.route('/suspicious-ips')
 def get_suspicious_ips():
     # Dedicated API route for suspicious IP list.
     return jsonify({"suspicious_ips": sorted(list(suspicious_ips))})
+
+
+@limiter.exempt
+@app.route("/clear-logs", methods=["POST"])
+def clear_logs():
+    # Reset all in-memory tracking state.
+    activity_log.clear()
+    request_timestamps.clear()
+    blocked_ip_counts.clear()
+    suspicious_ips.clear()
+    bot_detected_ips.clear()
+
+    return jsonify({
+        "success": True,
+        "message": "Logs cleared"
+    })
 
 
 if __name__ == '__main__':

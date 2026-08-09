@@ -1,168 +1,551 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>API Shield - Live Dashboard</title>
-    <style>
-        :root{
-            --bg:#0f1720;
-            --card:#0b1220;
-            --muted:#9aa4b2;
-            --success:#16a34a;
-            --danger:#ef4444;
-            --bot:#f97316;
-            --panel-radius:10px;
-        }
-        body{font-family:Inter,ui-sans-serif,system-ui,Arial,sans-serif;background:var(--bg);color:#e6eef6;margin:0;padding:24px}
-        header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-        h1{font-size:20px;margin:0;color:var(--success)}
-        .summary{display:flex;gap:12px}
-        .summary .card{background:var(--card);padding:12px 18px;border-radius:var(--panel-radius);min-width:160px}
-        .card .label{color:var(--muted);font-size:12px}
-        .card .value{font-size:18px;margin-top:6px}
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>API Shield — SOC Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #070B14;
+    --panel: #0E1524;
+    --panel-2: #121A2C;
+    --line: #1E2A42;
+    --text: #DCE4F2;
+    --muted: #7488AA;
+    --accent: #3FC6F2;
+    --accent-dim: #1D4E63;
+    --success: #33D6A6;
+    --warn: #F5B942;
+    --danger: #F5566C;
+    --critical: #FF3D5A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 500px at 15% -10%, rgba(63,198,242,0.08), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(245,86,108,0.06), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Mono', monospace;
+    min-height:100vh;
+  }
+  h1,h2,h3, .display{ font-family:'Space Grotesk', sans-serif; }
 
-        main{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+  /* ---------- NAV ---------- */
+  nav{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 28px; border-bottom:1px solid var(--line);
+    background:rgba(10,15,26,0.85); backdrop-filter:blur(6px);
+    position:sticky; top:0; z-index:50;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{
+    width:30px; height:30px; border-radius:8px;
+    background:linear-gradient(135deg, var(--accent), #1c5f7a);
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px; box-shadow:0 0 18px rgba(63,198,242,0.35);
+  }
+  .brand-name{ font-family:'Space Grotesk', sans-serif; font-weight:700; letter-spacing:0.3px; font-size:16px; }
+  .brand-sub{ color:var(--muted); font-size:11px; letter-spacing:1px; text-transform:uppercase;}
 
-        .panel{background:var(--card);padding:14px;border-radius:var(--panel-radius)}
-        .logs{max-height:60vh;overflow:auto}
-        .log-entry{padding:10px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
-        .log-meta{font-size:12px;color:var(--muted)}
-        .success{background:rgba(22,163,74,0.08);border-left:4px solid var(--success)}
-        .blocked{background:rgba(239,68,68,0.08);border-left:4px solid var(--danger)}
-        .bot{background:rgba(249,115,22,0.06);border-left:4px solid var(--bot)}
+  .nav-links{ display:flex; gap:26px; }
+  .nav-links a{
+    color:var(--muted); text-decoration:none; font-size:13px; letter-spacing:0.3px;
+    padding-bottom:4px; border-bottom:2px solid transparent; cursor:pointer;
+  }
+  .nav-links a.active, .nav-links a:hover{ color:var(--text); border-bottom-color:var(--accent); }
 
-        .right-col{display:flex;flex-direction:column;gap:12px}
-        .bots-list,.suspicious-list{max-height:28vh;overflow:auto}
-        .panel-title{font-weight:600;margin-bottom:8px}
-        footer{margin-top:14px;color:var(--muted);font-size:12px}
+  .health{
+    display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted);
+    padding:6px 12px; border:1px solid var(--line); border-radius:20px; position:relative; overflow:hidden;
+  }
+  .radar{
+    width:10px; height:10px; border-radius:50%; background:var(--success); position:relative;
+    box-shadow:0 0 8px var(--success);
+  }
+  .radar::after{
+    content:''; position:absolute; inset:-6px; border-radius:50%;
+    background:conic-gradient(from 0deg, rgba(51,214,166,0.55), transparent 30%);
+    animation:sweep 2.4s linear infinite;
+  }
+  @keyframes sweep{ to{ transform:rotate(360deg); } }
+  .health.down .radar{ background:var(--danger); box-shadow:0 0 8px var(--danger);}
+  .health.down .radar::after{ background:conic-gradient(from 0deg, rgba(245,86,108,0.55), transparent 30%); }
 
-    </style>
+  main{ max-width:1320px; margin:0 auto; padding:22px 28px 60px; }
+
+  /* ---------- STATUS ROW ---------- */
+  .status-row{ display:flex; gap:18px; flex-wrap:wrap; margin-bottom:22px; }
+  .status-pill{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); }
+  .dot{ width:8px; height:8px; border-radius:50%; background:var(--success); box-shadow:0 0 6px var(--success); }
+
+  /* ---------- STAT GRID ---------- */
+  .stat-grid{
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:22px;
+  }
+  .stat-card{
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    border:1px solid var(--line); border-radius:12px; padding:16px 18px;
+    position:relative; overflow:hidden;
+  }
+  .stat-card::before{
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent-color, var(--accent));
+  }
+  .stat-label{ color:var(--muted); font-size:11px; letter-spacing:0.6px; text-transform:uppercase; margin-bottom:8px;}
+  .stat-value{ font-family:'Space Grotesk', sans-serif; font-size:30px; font-weight:700; }
+  .stat-value.small{ font-size:20px; }
+
+  /* ---------- PANELS ---------- */
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:18px 20px; margin-bottom:20px;
+  }
+  .panel-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;}
+  .panel-title{ font-family:'Space Grotesk', sans-serif; font-size:14px; font-weight:600; letter-spacing:0.3px; display:flex; align-items:center; gap:8px;}
+  .panel-title .tag{ font-size:10px; color:var(--muted); border:1px solid var(--line); padding:2px 8px; border-radius:10px; letter-spacing:0.5px;}
+
+  /* ---------- CONTROLS ---------- */
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  input[type=text]{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:8px 12px; border-radius:8px; font-family:'IBM Plex Mono', monospace; font-size:12px; min-width:220px;
+  }
+  input[type=text]:focus, select:focus, button:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+  select{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:8px 10px; border-radius:8px; font-family:'IBM Plex Mono', monospace; font-size:12px;
+  }
+  .btn{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:8px 14px; border-radius:8px; font-size:12px; cursor:pointer; font-family:'IBM Plex Mono', monospace;
+    transition:border-color .15s, color .15s;
+  }
+  .btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn.danger:hover{ border-color:var(--critical); color:var(--critical); }
+  .filter-group{ display:flex; gap:6px; }
+  .filter-chip{
+    background:transparent; border:1px solid var(--line); color:var(--muted);
+    padding:6px 12px; border-radius:16px; font-size:11px; cursor:pointer; letter-spacing:0.3px;
+  }
+  .filter-chip.active{ color:var(--bg); background:var(--accent); border-color:var(--accent); font-weight:600;}
+  label.chk{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+
+  /* ---------- TABLE ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  thead th{
+    text-align:left; color:var(--muted); font-weight:500; letter-spacing:0.5px; text-transform:uppercase;
+    font-size:10.5px; padding:8px 10px; border-bottom:1px solid var(--line);
+  }
+  tbody td{ padding:8px 10px; border-bottom:1px solid rgba(30,42,66,0.6); vertical-align:middle; }
+  tbody tr:hover{ background:rgba(63,198,242,0.05); }
+  .badge{
+    display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:12px;
+    font-size:11px; font-weight:600; border:1px solid transparent;
+  }
+  .sev{ padding:2px 8px; border-radius:6px; font-size:10px; font-weight:700; letter-spacing:0.4px; }
+  .sev-low{ color:var(--success); background:rgba(51,214,166,0.1); }
+  .sev-medium{ color:var(--warn); background:rgba(245,185,66,0.1); }
+  .sev-high{ color:var(--danger); background:rgba(245,86,108,0.1); }
+  .sev-critical{ color:var(--critical); background:rgba(255,61,90,0.15); }
+
+  .table-wrap{ max-height:420px; overflow-y:auto; }
+
+  .two-col{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+  .legend-row{ display:flex; gap:18px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+  .legend-row span{ display:flex; align-items:center; gap:6px; }
+
+  footer{
+    border-top:1px solid var(--line); margin-top:10px; padding-top:22px;
+    color:var(--muted); font-size:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .empty{ color:var(--muted); text-align:center; padding:26px; font-size:12px; }
+
+  @media (max-width:1000px){
+    .stat-grid{ grid-template-columns:repeat(2,1fr); }
+    .two-col{ grid-template-columns:1fr; }
+  }
+</style>
 </head>
 <body>
 
-    <header>
-        <div>
-            <h1>🔐 API Shield - Live Security Dashboard</h1>
-            <div style="color:var(--muted);font-size:13px">Auto-refresh every 3 seconds · Showing recent activity</div>
+<nav>
+  <div class="brand">
+    <div class="brand-mark">🛡</div>
+    <div>
+      <div class="brand-name">API Shield</div>
+      <div class="brand-sub">Security Operations Center</div>
+    </div>
+  </div>
+  <div class="nav-links">
+    <a class="active" data-section="dashboard-section">Dashboard</a>
+    <a data-section="logs-section">Live Logs</a>
+    <a data-section="about-section">About</a>
+  </div>
+  <div class="health" id="healthPill"><div class="radar"></div><span id="healthText">System Healthy</span></div>
+</nav>
+
+<main>
+
+  <div class="status-row">
+    <div class="status-pill"><div class="dot"></div>Server Running</div>
+    <div class="status-pill"><div class="dot"></div>JWT Service</div>
+    <div class="status-pill"><div class="dot"></div>Monitoring Active</div>
+    <div class="status-pill"><div class="dot"></div>Rate Limiter</div>
+    <div class="status-pill" style="margin-left:auto;">Last sync: <span id="lastSync" style="color:var(--text); margin-left:4px;">—</span></div>
+  </div>
+
+  <section id="dashboard-section">
+    <div class="stat-grid">
+      <div class="stat-card" style="--accent-color:var(--accent)">
+        <div class="stat-label">Total Requests</div>
+        <div class="stat-value" id="statTotal">0</div>
+      </div>
+      <div class="stat-card" style="--accent-color:var(--success)">
+        <div class="stat-label">Successful</div>
+        <div class="stat-value" id="statSuccess">0</div>
+      </div>
+      <div class="stat-card" style="--accent-color:var(--danger)">
+        <div class="stat-label">Blocked</div>
+        <div class="stat-value" id="statBlocked">0</div>
+      </div>
+      <div class="stat-card" style="--accent-color:var(--warn)">
+        <div class="stat-label">Bots Detected</div>
+        <div class="stat-value" id="statBots">0</div>
+      </div>
+      <div class="stat-card" style="--accent-color:var(--accent)">
+        <div class="stat-label">Unique IPs</div>
+        <div class="stat-value" id="statUniqueIPs">0</div>
+      </div>
+      <div class="stat-card" style="--accent-color:var(--critical)">
+        <div class="stat-label">Suspicious IPs</div>
+        <div class="stat-value" id="statSuspicious">0</div>
+      </div>
+      <div class="stat-card" style="--accent-color:var(--danger)">
+        <div class="stat-label">Admin Attacks Blocked</div>
+        <div class="stat-value" id="statAdminAttacks">0</div>
+      </div>
+      <div class="stat-card" style="--accent-color:var(--muted)">
+        <div class="stat-label">Last Attack</div>
+        <div class="stat-value small" id="statLastAttack">—</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Top Attacking IPs</div></div>
+        <table>
+          <thead><tr><th>IP</th><th>Blocked</th><th>Bot</th><th>Last Seen</th></tr></thead>
+          <tbody id="topAttackersBody"><tr><td colspan="4" class="empty">No data yet</td></tr></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Endpoint Statistics</div></div>
+        <table>
+          <thead><tr><th>Endpoint</th><th>Method</th><th>Hits</th></tr></thead>
+          <tbody id="endpointBody"><tr><td colspan="3" class="empty">No data yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="logs-section" class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Recent Activity <span class="tag" id="rowCount">0 events</span></div>
+      <div class="controls">
+        <input type="text" id="searchInput" placeholder="Search IP, event, status, endpoint…" />
+        <div class="filter-group" id="filterGroup">
+          <button class="filter-chip active" data-filter="all">All</button>
+          <button class="filter-chip" data-filter="success">Success</button>
+          <button class="filter-chip" data-filter="blocked">Blocked</button>
+          <button class="filter-chip" data-filter="bots">Bots</button>
+          <button class="filter-chip" data-filter="today">Today</button>
         </div>
-        <div class="summary">
-            <div class="card">
-                <div class="label">Total Requests</div>
-                <div id="totalRequests" class="value">—</div>
-            </div>
-            <div class="card">
-                <div class="label">Successful</div>
-                <div id="successful" class="value" style="color:var(--success)">—</div>
-            </div>
-            <div class="card">
-                <div class="label">Blocked</div>
-                <div id="blocked" class="value" style="color:var(--danger)">—</div>
-            </div>
-            <div class="card">
-                <div class="label">Bots Detected</div>
-                <div id="botsDetected" class="value" style="color:var(--bot)">—</div>
-            </div>
-        </div>
-    </header>
+      </div>
+    </div>
+    <div class="controls" style="margin-bottom:14px;">
+      <label class="chk"><input type="checkbox" id="autoRefreshChk" checked /> Auto Refresh</label>
+      <select id="refreshInterval">
+        <option value="3000">Every 3 sec</option>
+        <option value="10000">Every 10 sec</option>
+        <option value="30000">Every 30 sec</option>
+      </select>
+      <button class="btn" id="exportCsvBtn">Export CSV</button>
+      <button class="btn" id="exportJsonBtn">Export JSON</button>
+      <button class="btn danger" id="clearLogsBtn">Clear Logs</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>IP</th><th>Endpoint</th><th>Method</th><th>Status</th><th>Event</th><th>Severity</th></tr></thead>
+        <tbody id="logsBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="legend-row" style="margin-top:14px;">
+      <span>🟢 Success</span>
+      <span>🟡 Warning</span>
+      <span>🟠 Bot</span>
+      <span>🔴 Blocked</span>
+      <span>⚫ Critical</span>
+    </div>
+  </section>
 
-    <main>
-        <section class="panel">
-            <div class="panel-title">Recent Activity</div>
-            <div id="logContainer" class="logs">Loading...</div>
-        </section>
+  <section id="about-section" class="panel">
+    <div class="panel-head"><div class="panel-title">About This Project</div></div>
+    <p style="color:var(--muted); line-height:1.6; font-size:13px; max-width:760px;">
+      API Shield is a lightweight API security monitoring system built around a Flask backend.
+      It detects and logs JWT-based attacks (missing / invalid / expired tokens), automated bot
+      traffic via request-rate fingerprinting, rate-limit abuse, role-based access-control (RBAC)
+      violations such as students attempting admin-only actions, and suspicious IPs based on
+      repeated blocked activity. This dashboard polls the backend's <code>/logs</code> and
+      <code>/suspicious-ips</code> endpoints to visualize that activity in real time.
+    </p>
+    <footer>
+      <div>API Shield v1.0</div>
+      <div>© 2026</div>
+    </footer>
+  </section>
 
-        <aside class="right-col">
-            <div class="panel">
-                <div class="panel-title">Bot Detections (Orange)</div>
-                <div id="botContainer" class="bots-list">Loading...</div>
-            </div>
+</main>
 
-            <div class="panel">
-                <div class="panel-title">Suspicious IPs (Red)</div>
-                <div id="suspiciousContainer" class="suspicious-list">Loading...</div>
-            </div>
-        </aside>
-    </main>
+<script>
+const REFRESH_DEFAULT = 3000;
+let logsCache = [];
+let summaryCache = {};
+let suspiciousCache = [];
+let activeFilter = 'all';
+let refreshTimer = null;
 
-    <footer>API Shield · Live monitoring</footer>
+const el = id => document.getElementById(id);
 
-    <script>
-        async function fetchData(){
-            try{
-                const [logsRes, ipsRes] = await Promise.all([
-                    fetch('/logs'),
-                    fetch('/suspicious-ips')
-                ]);
+function animateNumber(elem, to){
+  const from = parseInt(elem.dataset.val || '0', 10);
+  if (from === to) { elem.textContent = to; return; }
+  const duration = 500;
+  const start = performance.now();
+  function step(now){
+    const p = Math.min(1, (now - start) / duration);
+    const val = Math.round(from + (to - from) * p);
+    elem.textContent = val;
+    if (p < 1) requestAnimationFrame(step);
+    else elem.dataset.val = to;
+  }
+  elem.dataset.val = elem.dataset.val || '0';
+  requestAnimationFrame(step);
+}
 
-                const logsJson = await logsRes.json();
-                const ipsJson = await ipsRes.json();
+function severityFor(event){
+  if (event.includes('BOT DETECTED')) return 'critical';
+  if (event.includes('Invalid Token') || event.includes('No Token') || event.includes('Student tried admin action')) return 'high';
+  if (event.includes('Invalid credentials') || event.includes('Rate limit') || event.includes('not found for delete')) return 'medium';
+  return 'low';
+}
 
-                const logs = logsJson.logs || [];
-                const summary = logsJson.summary || {total_requests:0,blocked:0,successful:0,bots_detected:0};
-                const botLogs = logsJson.bot_logs || [];
+function badgeFor(event){
+  if (event.includes('SUCCESS')) return {icon:'🟢', label: event.replace('SUCCESS - ', '')};
+  if (event.includes('BOT DETECTED')) return {icon:'🟠', label:'Bot Detected'};
+  if (event.includes('Invalid credentials')) return {icon:'🔴', label:'Invalid Login'};
+  if (event.includes('Invalid Token') || event.includes('No Token')) return {icon:'🔴', label:'Invalid / Missing JWT'};
+  if (event.includes('Student tried admin action')) return {icon:'🔴', label:'Unauthorized Admin Action'};
+  if (event.includes('Rate limit')) return {icon:'🟡', label:'Rate Limit Exceeded'};
+  return {icon:'⚪', label: event.replace('BLOCKED - ', '')};
+}
 
-                document.getElementById('totalRequests').innerText = summary.total_requests;
-                document.getElementById('blocked').innerText = summary.blocked;
-                document.getElementById('successful').innerText = summary.successful;
-                document.getElementById('botsDetected').innerText = summary.bots_detected;
+async function fetchData(){
+  try{
+    const [logsRes, susRes] = await Promise.all([
+      fetch('/logs'), fetch('/suspicious-ips')
+    ]);
+    const logsJson = await logsRes.json();
+    const susJson = await susRes.json();
 
-                const container = document.getElementById('logContainer');
-                container.innerHTML = '';
+    logsCache = logsJson.logs || [];
+    summaryCache = logsJson.summary || {};
+    suspiciousCache = susJson.suspicious_ips || [];
 
-                // Show up to last 20 events, newest first
-                logs.slice(-20).reverse().forEach(log => {
-                    const div = document.createElement('div');
-                    div.className = 'log-entry ' + (log.event && log.event.includes('BOT DETECTED') ? 'bot' : (log.status < 400 ? 'success' : 'blocked'));
-                    const left = document.createElement('div');
-                    left.innerHTML = `<div style="font-weight:600">${escapeHtml(log.event)}</div><div class=\"log-meta\">${escapeHtml(log.ip)} • ${escapeHtml(log.time)}</div>`;
-                    const right = document.createElement('div');
-                    right.innerHTML = `<div class=\"log-meta\">Status: ${log.status}</div>`;
-                    div.appendChild(left);
-                    div.appendChild(right);
-                    container.appendChild(div);
-                });
+    setHealth(true);
+    render();
+    el('lastSync').textContent = new Date().toLocaleTimeString();
+  } catch(err){
+    setHealth(false);
+  }
+}
 
-                const botContainer = document.getElementById('botContainer');
-                botContainer.innerHTML = '';
-                if(botLogs.length===0){
-                    botContainer.innerHTML = '<div class="log-meta">No bot detections</div>';
-                } else {
-                    botLogs.slice(-20).reverse().forEach(b => {
-                        const d = document.createElement('div');
-                        d.className = 'log-entry bot';
-                        d.innerHTML = `<div style="font-weight:600">${escapeHtml(b.event)}</div><div class=\"log-meta\">${escapeHtml(b.ip)} • ${escapeHtml(b.time)}</div>`;
-                        botContainer.appendChild(d);
-                    });
-                }
+function setHealth(ok){
+  const pill = el('healthPill');
+  pill.classList.toggle('down', !ok);
+  el('healthText').textContent = ok ? 'System Healthy' : 'Connection Lost';
+}
 
-                const suspicious = ipsJson.suspicious_ips || [];
-                const suspiciousContainer = document.getElementById('suspiciousContainer');
-                suspiciousContainer.innerHTML = '';
-                if(suspicious.length===0){
-                    suspiciousContainer.innerHTML = '<div class="log-meta">No suspicious IPs</div>';
-                } else {
-                    suspicious.forEach(ip => {
-                        const d = document.createElement('div');
-                        d.className = 'log-entry blocked';
-                        d.innerHTML = `<div style="font-weight:600">${escapeHtml(ip)}</div>`;
-                        suspiciousContainer.appendChild(d);
-                    });
-                }
+function computeDerived(){
+  const uniqueIPs = new Set(logsCache.map(l => l.ip)).size;
+  const adminAttacks = logsCache.filter(l => l.event.includes('Student tried admin action')).length;
 
-            } catch(err){
-                console.error(err);
-            }
-        }
+  const blockedLogs = logsCache.filter(l => l.status >= 400);
+  const lastAttack = blockedLogs.length ? blockedLogs[blockedLogs.length - 1].time : null;
 
-        function escapeHtml(text){
-            if(!text && text!==0) return '';
-            return String(text).replace(/[&<>\"']/g, function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});
-        }
+  const attackerMap = {};
+  blockedLogs.forEach(l => {
+    if(!attackerMap[l.ip]) attackerMap[l.ip] = {count:0, lastSeen:l.time};
+    attackerMap[l.ip].count++;
+    attackerMap[l.ip].lastSeen = l.time;
+  });
+  const topAttackers = Object.entries(attackerMap)
+    .sort((a,b) => b[1].count - a[1].count)
+    .slice(0, 8);
 
-        fetchData();
-        setInterval(fetchData, 3000);
-    </script>
+  const endpointMap = {};
+  logsCache.forEach(l => {
+    const key = `${l.endpoint || '—'} | ${l.method || '—'}`;
+    endpointMap[key] = (endpointMap[key] || 0) + 1;
+  });
+  const endpointStats = Object.entries(endpointMap).sort((a,b) => b[1]-a[1]);
 
+  return { uniqueIPs, adminAttacks, lastAttack, topAttackers, endpointStats };
+}
+
+function render(){
+  const d = computeDerived();
+
+  animateNumber(el('statTotal'), summaryCache.total_requests || 0);
+  animateNumber(el('statSuccess'), summaryCache.successful || 0);
+  animateNumber(el('statBlocked'), summaryCache.blocked || 0);
+  animateNumber(el('statBots'), summaryCache.bots_detected || 0);
+  animateNumber(el('statUniqueIPs'), d.uniqueIPs);
+  animateNumber(el('statSuspicious'), suspiciousCache.length);
+  animateNumber(el('statAdminAttacks'), d.adminAttacks);
+  el('statLastAttack').textContent = d.lastAttack ? d.lastAttack.split(' ')[1] : '—';
+
+  renderTopAttackers(d.topAttackers);
+  renderEndpointStats(d.endpointStats);
+  renderLogsTable();
+}
+
+function renderTopAttackers(list){
+  const body = el('topAttackersBody');
+  if(!list.length){ body.innerHTML = '<tr><td colspan="4" class="empty">No attacks recorded</td></tr>'; return; }
+  body.innerHTML = list.map(([ip, info]) => `
+    <tr>
+      <td>${ip}</td>
+      <td>${info.count}</td>
+      <td>${suspiciousCache.includes(ip) ? '🟠 Yes' : '—'}</td>
+      <td>${info.lastSeen}</td>
+    </tr>`).join('');
+}
+
+function renderEndpointStats(list){
+  const body = el('endpointBody');
+  if(!list.length){ body.innerHTML = '<tr><td colspan="3" class="empty">No data yet</td></tr>'; return; }
+  body.innerHTML = list.map(([key, hits]) => {
+    const [endpoint, method] = key.split(' | ');
+    return `<tr><td>${endpoint}</td><td>${method}</td><td>${hits}</td></tr>`;
+  }).join('');
+}
+
+function filteredLogs(){
+  const q = el('searchInput').value.trim().toLowerCase();
+  let rows = [...logsCache].reverse();
+
+  if(activeFilter === 'success') rows = rows.filter(l => l.status < 400);
+  if(activeFilter === 'blocked') rows = rows.filter(l => l.status >= 400);
+  if(activeFilter === 'bots') rows = rows.filter(l => l.event.includes('BOT DETECTED'));
+  if(activeFilter === 'today'){
+    const today = new Date().toISOString().slice(0,10);
+    rows = rows.filter(l => l.time.startsWith(today));
+  }
+  if(q){
+    rows = rows.filter(l =>
+      (l.ip||'').toLowerCase().includes(q) ||
+      (l.event||'').toLowerCase().includes(q) ||
+      String(l.status).includes(q) ||
+      (l.endpoint||'').toLowerCase().includes(q)
+    );
+  }
+  return rows;
+}
+
+function renderLogsTable(){
+  const rows = filteredLogs();
+  el('rowCount').textContent = `${rows.length} events`;
+  const body = el('logsBody');
+  if(!rows.length){ body.innerHTML = '<tr><td colspan="7" class="empty">No matching events</td></tr>'; return; }
+
+  body.innerHTML = rows.slice(0, 200).map(l => {
+    const b = badgeFor(l.event);
+    const sev = severityFor(l.event);
+    return `
+      <tr>
+        <td>${l.time ? l.time.split(' ')[1] : '—'}</td>
+        <td>${l.ip}</td>
+        <td>${l.endpoint || '—'}</td>
+        <td>${l.method || '—'}</td>
+        <td>${l.status}</td>
+        <td><span class="badge">${b.icon} ${b.label}</span></td>
+        <td><span class="sev sev-${sev}">${sev.toUpperCase()}</span></td>
+      </tr>`;
+  }).join('');
+}
+
+function toCSV(rows){
+  const header = ['time','ip','endpoint','method','status','event'];
+  const lines = [header.join(',')];
+  rows.forEach(l => {
+    lines.push([l.time, l.ip, l.endpoint, l.method, l.status, `"${l.event}"`].join(','));
+  });
+  return lines.join('\n');
+}
+
+function download(filename, content, type){
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function setupAutoRefresh(){
+  if(refreshTimer) clearInterval(refreshTimer);
+  if(!el('autoRefreshChk').checked) return;
+  const interval = parseInt(el('refreshInterval').value, 10) || REFRESH_DEFAULT;
+  refreshTimer = setInterval(fetchData, interval);
+}
+
+// ---- Event wiring ----
+document.querySelectorAll('.nav-links a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.querySelectorAll('.nav-links a').forEach(x => x.classList.remove('active'));
+    a.classList.add('active');
+    const target = document.getElementById(a.dataset.section);
+    if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+});
+
+document.querySelectorAll('.filter-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+    renderLogsTable();
+  });
+});
+
+el('searchInput').addEventListener('input', renderLogsTable);
+el('autoRefreshChk').addEventListener('change', setupAutoRefresh);
+el('refreshInterval').addEventListener('change', setupAutoRefresh);
+
+el('exportCsvBtn').addEventListener('click', () => download('api-shield-logs.csv', toCSV(filteredLogs()), 'text/csv'));
+el('exportJsonBtn').addEventListener('click', () => download('api-shield-logs.json', JSON.stringify(filteredLogs(), null, 2), 'application/json'));
+
+el('clearLogsBtn').addEventListener('click', async () => {
+  if(!confirm('Clear all logs and reset tracking state?')) return;
+  await fetch('/clear-logs', { method:'POST' });
+  fetchData();
+});
+
+fetchData();
+setupAutoRefresh();
+</script>
 </body>
 </html>
